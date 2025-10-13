@@ -192,6 +192,12 @@ const projects = [
     category: "eventos",
     status: true,
     url: "proyectos/henshin/henshin.html",
+  }, 
+  {
+    name: "mercury splash",
+    category: "eventos",
+    status: true,
+    url: "proyectos/mercurySplash/mercurySplash.html",
   },
   {
     name: "high tide",

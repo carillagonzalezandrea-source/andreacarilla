@@ -203,7 +203,7 @@ const projects = [
     name: "<3or",
     category: "eventos",
     status: true,
-    url: "proyectos/<3or>/<3or>.html",
+    url: "proyectos/tresor/tresor.html",
   },
   {
     name: "high tide",

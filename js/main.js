@@ -200,6 +200,12 @@ const projects = [
     url: "proyectos/mercurySplash/mercurySplash.html",
   },
   {
+    name: "<3or!",
+    category: "eventos",
+    status: true,
+    url: "proyectos/<3or!>/<3or!>.html",
+  },
+  {
     name: "high tide",
     category: "fashion story",
     status: true,

@@ -12,6 +12,18 @@ body {
   font-family: sans-serif;
 }
 
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 /* Solo en páginas de proyecto: aseguramos que se pueda hacer scroll */
 body[data-page-type="proyecto"] {
   overflow-y: auto;
@@ -72,18 +84,13 @@ a:active {
 /* Estilo base para todos los project-link */
 .project-link {
   position: absolute;
-  word-break: break-word;
-  white-space: normal;
-  overflow-wrap: break-word;
-  pointer-events: auto;
-}
-
-.project-link a {
   display: inline-block;
   font-size: 14px;
   color: black;
-  /*el fondo gris*/
   padding: 0.4em 0.6em;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  pointer-events: auto;
 }
 
 /* Opcional: solo aplicar en pantallas pequeñas */
@@ -300,6 +307,22 @@ a:active {
   flex: 2;
   min-width: 200px;
   text-align: center;
+}
+
+.project-description h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1.1rem;
+  line-height: 1.2;
+  font-weight: 400;
+}
+
+.project-description h2 a {
+  color: inherit;
+}
+
+.project-description p {
+  margin: 0 0 0.75rem;
+  line-height: 1.4;
 }
 
 .project-meta {

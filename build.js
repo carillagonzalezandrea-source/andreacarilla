@@ -1,47 +1,68 @@
 #!/usr/bin/env node
-// build.js - genera una pagina estatica por proyecto en proyectos/<slug>/
+// build.js - escribe en HTML todo el contenido de la web a partir de los json
 //
-// Por que existe: proyecto.html es un esqueleto vacio que se rellena con JS,
-// asi que los scrapers de WhatsApp, Instagram, Facebook o Twitter -que no
-// ejecutan JS- veian siempre "proyecto" sin imagen ni descripcion. Estas
-// paginas llevan el <head> ya escrito, asi que las previsualizaciones al
-// compartir funcionan. El body lo sigue montando js/main.js igual que antes.
+// Genera:
+//   proyectos/<slug>/index.html   una pagina completa por proyecto
+//   index.html                    solo los bloques entre <!-- build:x --> y <!-- /build:x -->
+//   sitemap.xml, robots.txt
+//
+// Por que: si el contenido lo pinta el JS, Google ve una pagina vacia y los
+// scrapers de WhatsApp, Instagram o Twitter (que no ejecutan JS) no ven ni
+// titulo ni imagen. Asi el navegador recibe el HTML ya hecho y el JS solo
+// coloca cosas e interactua (galeria de la home, filtros, popup).
 //
 // No toca ningun json: lee data/home.json y data/<slug>/<slug>.json tal cual
 // los deja el formateador, y mide las imagenes leyendo los propios ficheros.
+// Sin dependencias. Lo ejecuta la Action en cada push que toque data/.
 //
 // Uso: node build.js
 
-const fs = require("fs");
-const path = require("path");
-const { execSync } = require("child_process");
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import {
+  escapeHtml,
+  galleryImages,
+  homeLinks,
+  imagePath,
+  projectDescription,
+  projectMain,
+  projectTitle,
+  visibleProjects,
+} from "./js/plantillas.js";
 
-const ROOT = __dirname;
+const ROOT = path.dirname(fileURLToPath(import.meta.url));
 const DATA = path.join(ROOT, "data");
 const OUT = path.join(ROOT, "proyectos");
 
 // ---------------------------------------------------------------------------
-// URL del sitio: sale del CNAME si lo hay, y si no del remote de git.
-// Asi el mismo script funciona en el repo del cliente (andreacarilla.work)
-// y en la copia (meowrhino.github.io/andreacarilla) sin configurar nada.
+// URL del sitio: siempre el dominio de Andrea, tambien en la copia
+// (meowrhino.github.io/andreacarilla). Asi el canonical de la copia apunta al
+// original y Google no indexa dos webs iguales.
 // ---------------------------------------------------------------------------
-function detectSiteUrl() {
-  const cname = path.join(ROOT, "CNAME");
-  if (fs.existsSync(cname)) {
-    const host = fs.readFileSync(cname, "utf8").trim();
-    if (host) return `https://${host}`;
-  }
-  try {
-    const remote = execSync("git config --get remote.origin.url", {
-      cwd: ROOT,
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"],
-    }).trim();
-    const m = remote.match(/github\.com[/:]([^/]+)\/([^/.]+)/i);
-    if (m) return `https://${m[1].toLowerCase()}.github.io/${m[2]}`;
-  } catch (_) {}
-  return "";
-}
+const SITE_URL = "https://andreacarilla.work";
+const SITE_NAME = "andrea carilla";
+const HOME_DESCRIPTION =
+  "Portfolio de fotografía de Andrea Carilla. Proyectos de moda, editorial y diario personal.";
+
+// Bio del popup "andrea carilla". Va en el HTML de todas las paginas
+const BIO_HTML = `
+            <p>Graduada en Comunicación Audiovisual por la Universidad de Granada en 2019, su práctica fotográfica se
+                articula entre la moda, el diario personal y la fotografía robada, tensionando los límites entre lo
+                documental y lo construido.</p>
+            <p>Es cofundadora de la editorial de autoedición <a href="https://quiennocorrevuela.bigcartel.com/"
+                    target="_blank" rel="noopener noreferrer">Quien no corre, vuela</a>, desde donde ha publicado
+                <i>archivo en pixel</i> y <i>no time left for square</i>, investigando nuevas formas de narrar,
+                publicar y distribuir fotografía contemporánea desde los márgenes.</p>
+            <p>Su trabajo se construye desde la serialidad y la repetición: las imágenes no funcionan de forma
+                aislada, sino que se organizan como fragmentos de una narrativa abierta. Dispara desde el impulso y
+                el error, con una cámara que no busca certezas ni discursos cerrados, sino que reacciona ante lo que
+                hiere, incomoda o emociona. Una mirada crítica, permeable y radicalmente encarnada en lo cotidiano.</p>
+            <div class="footer">
+                <a href="mailto:carillagonzalezandrea@gmail.com">carillagonzalezandrea@gmail.com</a>
+                <a href="https://www.instagram.com/andreacarilla/" target="_blank" rel="noopener noreferrer">@andreacarilla</a>
+                <span class="credit">web: <a href="https://meowrhino.studio/" target="_blank" rel="noopener noreferrer">meowrhino</a></span>
+            </div>`;
 
 // ---------------------------------------------------------------------------
 // Dimensiones de un webp sin dependencias. Hace falta para reservar el hueco
@@ -83,109 +104,69 @@ function webpSize(file) {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Mismas reglas de titulo y descripcion que js/components.js, para que el
-// <head> estatico y el que inyecta el JS digan exactamente lo mismo.
-// ---------------------------------------------------------------------------
-const stripHtml = (s) => String(s).replace(/<[^>]*>/g, "");
-const normalizeWhitespace = (s) => String(s).replace(/\s+/g, " ").trim();
-
-// Identico al truncate de js/components.js: si no, el <head> estatico y el que
-// inyecta el JS dirian cosas distintas en las descripciones largas
-function truncate(value, maxLength) {
-  if (value.length <= maxLength) return value;
-  return value.slice(0, maxLength - 3).trimEnd() + "...";
-}
-
-function projectTitle(data, fallback = "proyecto") {
-  return data?.titulo || data?.slug || fallback;
-}
-
-function projectDescription(data) {
-  const d = data.descripcion;
-  let candidate = "";
-  if (d) {
-    const paragraphs = Array.isArray(d.texto) ? d.texto : Array.isArray(d.es) ? d.es : [];
-    if (paragraphs.length > 0) candidate = paragraphs[0];
-    else if (d.titulo) candidate = d.titulo;
-  }
-  if (!candidate) candidate = projectTitle(data, "Proyecto");
-  return truncate(normalizeWhitespace(stripHtml(candidate)), 160);
-}
-
-function firstImage(data) {
-  if (data.primera_imatge?.src) return data.primera_imatge.src;
-  const list = Array.isArray(data.imatges) ? data.imatges : [];
-  for (const entry of list) {
-    const src = typeof entry === "string" ? entry : entry?.src;
-    if (src) return src;
-  }
-  return "";
-}
-
-function allImages(data) {
-  const out = [];
-  if (data.primera_imatge?.src) out.push(data.primera_imatge.src);
-  for (const entry of Array.isArray(data.imatges) ? data.imatges : []) {
-    const src = typeof entry === "string" ? entry : entry?.src;
-    if (src) out.push(src);
-  }
-  return out;
-}
-
-const escapeHtml = (s) =>
-  String(s)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-
 // JSON incrustado en el HTML: hay que cortar </script> o rompe el documento
 const escapeJson = (obj) => JSON.stringify(obj).replace(/</g, "\\u003c");
 
+// Tamaño de una imagen a partir de su ruta desde la raiz de la web
+const sizeOf = (file) => webpSize(path.join(ROOT, file));
+
+// ---------------------------------------------------------------------------
+// Piezas de HTML comunes
 // ---------------------------------------------------------------------------
 
-function imageSizeMap(slug, data) {
-  const sizes = {};
-  for (const src of allImages(data)) {
-    const clean = src.replace(/^\.\//, "");
-    const size = webpSize(path.join(DATA, slug, clean));
-    if (size) sizes[src] = [size.w, size.h];
-  }
-  return sizes;
+// Boton "andrea carilla" + popup con la bio, y "home" fuera de la home
+function siteChrome({ isHome }) {
+  return `    <nav id="andrea-nav">
+        <button id="open-andrea" aria-haspopup="dialog" aria-controls="andrea-popup" aria-expanded="false">andrea carilla</button>
+    </nav>
+    <div id="andrea-popup" role="dialog" aria-modal="true" aria-label="sobre andrea carilla">
+        <button class="close-btn" id="close-andrea">cerrar</button>
+        <div class="content">${BIO_HTML}
+        </div>
+    </div>${isHome ? "" : `\n    <a class="home-button" href="./">home</a>`}`;
 }
 
-function projectPage({ slug, data, siteUrl }) {
+function metaTags({ title, description, url, imageUrl }) {
+  return [
+    `<meta name="description" content="${escapeHtml(description)}">`,
+    `<meta property="og:site_name" content="${SITE_NAME}">`,
+    `<meta property="og:title" content="${escapeHtml(title)}">`,
+    `<meta property="og:description" content="${escapeHtml(description)}">`,
+    `<meta property="og:type" content="website">`,
+    `<meta property="og:locale" content="es_ES">`,
+    `<meta property="og:url" content="${escapeHtml(url)}">`,
+    imageUrl && `<meta property="og:image" content="${escapeHtml(imageUrl)}">`,
+    `<meta name="twitter:card" content="${imageUrl ? "summary_large_image" : "summary"}">`,
+    `<meta name="twitter:title" content="${escapeHtml(title)}">`,
+    `<meta name="twitter:description" content="${escapeHtml(description)}">`,
+    imageUrl && `<meta name="twitter:image" content="${escapeHtml(imageUrl)}">`,
+    `<link rel="canonical" href="${escapeHtml(url)}">`,
+  ]
+    .filter(Boolean)
+    .map((m) => "    " + m)
+    .join("\n");
+}
+
+// ---------------------------------------------------------------------------
+// Pagina de proyecto (el contenido sale de js/plantillas.js)
+// ---------------------------------------------------------------------------
+
+function projectPage(slug, data) {
   const title = projectTitle(data);
   const description = projectDescription(data);
-  const url = siteUrl ? `${siteUrl}/proyectos/${slug}/` : "";
-  const img = firstImage(data);
-  const imageUrl = img && siteUrl ? `${siteUrl}/data/${slug}/${img.replace(/^\.\//, "")}` : "";
-  const sizes = imageSizeMap(slug, data);
+  const url = `${SITE_URL}/proyectos/${slug}/`;
+  const first = data.primera_imatge?.src || galleryImages(data)[0]?.src;
+  const imageUrl = first ? `${SITE_URL}/${imagePath(slug, first)}` : "";
 
   const ld = {
     "@context": "https://schema.org",
     "@type": "CreativeWork",
     name: title,
     description,
-    author: { "@type": "Person", name: "Andrea Carilla" },
+    url,
+    author: { "@type": "Person", name: "Andrea Carilla", url: SITE_URL },
   };
-  if (url) ld.url = url;
   if (imageUrl) ld.image = imageUrl;
-
-  const meta = [
-    `<meta name="description" content="${escapeHtml(description)}">`,
-    `<meta property="og:title" content="${escapeHtml(title)}">`,
-    `<meta property="og:description" content="${escapeHtml(description)}">`,
-    `<meta property="og:type" content="website">`,
-    url && `<meta property="og:url" content="${escapeHtml(url)}">`,
-    imageUrl && `<meta property="og:image" content="${escapeHtml(imageUrl)}">`,
-    `<meta name="twitter:card" content="${imageUrl ? "summary_large_image" : "summary"}">`,
-    `<meta name="twitter:title" content="${escapeHtml(title)}">`,
-    `<meta name="twitter:description" content="${escapeHtml(description)}">`,
-    imageUrl && `<meta name="twitter:image" content="${escapeHtml(imageUrl)}">`,
-    url && `<link rel="canonical" href="${escapeHtml(url)}">`,
-  ].filter(Boolean);
 
   // <base> relativo: sirve igual en la raiz (andreacarilla.work) que en
   // subcarpeta (meowrhino.github.io/andreacarilla)
@@ -196,20 +177,19 @@ function projectPage({ slug, data, siteUrl }) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <base href="../../">
-    <title>${escapeHtml(title)}</title>
-${meta.map((m) => "    " + m).join("\n")}
+    <title>${escapeHtml(title)} · ${SITE_NAME}</title>
+${metaTags({ title, description, url, imageUrl })}
     <link rel="stylesheet" href="./css/style.css">
-    <link rel="modulepreload" href="./js/components.js">
-    <link rel="preload" as="fetch" href="./data/${slug}/${slug}.json" crossorigin>
     <script type="application/ld+json">${escapeJson(ld)}</script>
-    <script type="application/json" id="img-sizes">${escapeJson(sizes)}</script>
 </head>
 
 <body data-page-type="proyecto" data-slug="${escapeHtml(slug)}">
 
-    <noscript>
-        <p style="padding: 1rem;">Activa JavaScript para cargar el proyecto. <a href="./index.html">Volver al inicio</a></p>
-    </noscript>
+    <main>
+${projectMain(slug, data, sizeOf)}
+    </main>
+
+${siteChrome({ isHome: false })}
 
     <script type="module" src="./js/main.js"></script>
 
@@ -219,114 +199,137 @@ ${meta.map((m) => "    " + m).join("\n")}
 `;
 }
 
-// Bloque generado dentro de index.html, entre marcas, para no pisar el resto
-function homeBlock({ home, siteUrl }) {
+// ---------------------------------------------------------------------------
+// Home: solo se reescriben los bloques marcados de index.html
+// ---------------------------------------------------------------------------
+
+function homeHead(home) {
+  // Medidas de las portadas: la galeria las coloca antes de que carguen
   const sizes = {};
-  for (const set of Array.isArray(home.gallerySets) ? home.gallerySets : []) {
+  for (const set of home.gallerySets || []) {
     for (const item of set) {
-      if (!item?.src) continue;
-      const size = webpSize(path.join(ROOT, item.src));
+      const size = item?.src && webpSize(path.join(ROOT, item.src));
       if (size) sizes[item.src] = [size.w, size.h];
     }
   }
+  const firstCover = home.gallerySets?.[0]?.[0]?.src;
 
   const ld = [
     {
       "@context": "https://schema.org",
       "@type": "Person",
       name: "Andrea Carilla",
-      jobTitle: "Fotografa",
+      jobTitle: "Fotógrafa",
       email: "carillagonzalezandrea@gmail.com",
       sameAs: ["https://www.instagram.com/andreacarilla/"],
-      ...(siteUrl ? { url: siteUrl } : {}),
+      url: SITE_URL,
     },
-    {
-      "@context": "https://schema.org",
-      "@type": "WebSite",
-      name: "andrea carilla",
-      ...(siteUrl ? { url: siteUrl } : {}),
-    },
+    { "@context": "https://schema.org", "@type": "WebSite", name: SITE_NAME, url: SITE_URL },
   ];
 
   return [
-    `    <link rel="modulepreload" href="./js/components.js">`,
+    metaTags({
+      title: SITE_NAME,
+      description: HOME_DESCRIPTION,
+      url: `${SITE_URL}/`,
+      imageUrl: firstCover ? `${SITE_URL}/${firstCover}` : "",
+    }),
+    `    <link rel="modulepreload" href="./js/home.js">`,
     `    <link rel="preload" as="fetch" href="./data/home.json" crossorigin>`,
     `    <script type="application/ld+json">${escapeJson(ld)}</script>`,
     `    <script type="application/json" id="img-sizes">${escapeJson(sizes)}</script>`,
   ].join("\n");
 }
 
-function updateHome(block) {
-  const file = path.join(ROOT, "index.html");
-  const html = fs.readFileSync(file, "utf8");
-  const start = "<!-- build:start -->";
-  const end = "<!-- build:end -->";
-  if (!html.includes(start) || !html.includes(end)) {
-    throw new Error("index.html no tiene las marcas <!-- build:start --> / <!-- build:end -->");
-  }
-  const re = new RegExp(`${start}[\\s\\S]*?${end}`);
-  const next = html.replace(re, `${start}\n${block}\n    ${end}`);
-  if (next === html) return false;
-  fs.writeFileSync(file, next);
-  return true;
+// Sustituye lo que hay entre <!-- build:name --> y <!-- /build:name -->
+function replaceBlock(html, name, content) {
+  const start = `<!-- build:${name} -->`;
+  const end = `<!-- /build:${name} -->`;
+  const from = html.indexOf(start);
+  const to = html.indexOf(end);
+  if (from === -1 || to === -1) throw new Error(`index.html no tiene las marcas ${start} / ${end}`);
+  const indent = html.slice(html.lastIndexOf("\n", from) + 1, from);
+  return html.slice(0, from + start.length) + `\n${content}\n${indent}` + html.slice(to);
 }
 
 // ---------------------------------------------------------------------------
 
-function main() {
-  const siteUrl = detectSiteUrl();
-  if (!siteUrl) {
-    console.warn("[build] aviso: sin CNAME ni remote de github, las urls absolutas (og:url, canonical) se omiten");
-  } else {
-    console.log(`[build] sitio: ${siteUrl}`);
-  }
+// Escribe solo si cambia, para que la Action no haga commits vacios
+function writeIfChanged(file, content) {
+  const prev = fs.existsSync(file) ? fs.readFileSync(file, "utf8") : null;
+  if (prev === content) return false;
+  fs.writeFileSync(file, content);
+  return true;
+}
 
+function main() {
   const home = JSON.parse(fs.readFileSync(path.join(DATA, "home.json"), "utf8"));
-  const slugs = (home.projectes_visibles || [])
-    .filter((p) => p.visible !== false)
-    .map((p) => p.slug)
-    .filter(Boolean);
+  const visible = visibleProjects(home);
 
   fs.mkdirSync(OUT, { recursive: true });
 
   let written = 0;
-  const generated = new Set();
+  const published = [];
+  const keep = new Set(); // carpetas de proyectos/ que no se borran
 
-  for (const slug of slugs) {
+  for (const project of visible) {
+    const { slug } = project;
     const jsonPath = path.join(DATA, slug, `${slug}.json`);
     if (!fs.existsSync(jsonPath)) {
       console.warn(`[build] sin json, me lo salto: ${slug}`);
       continue;
     }
-    const data = JSON.parse(fs.readFileSync(jsonPath, "utf8"));
-    if (!data.slug) data.slug = slug;
-
-    const dir = path.join(OUT, slug);
-    fs.mkdirSync(dir, { recursive: true });
-    const file = path.join(dir, "index.html");
-    const html = projectPage({ slug, data, siteUrl });
-
-    const prev = fs.existsSync(file) ? fs.readFileSync(file, "utf8") : null;
-    if (prev !== html) {
-      fs.writeFileSync(file, html);
-      written++;
+    let data;
+    try {
+      data = JSON.parse(fs.readFileSync(jsonPath, "utf8"));
+    } catch (error) {
+      // Un json roto no debe tumbar toda la web: se avisa y se salta
+      console.error(`[build] ${slug}.json no se puede leer (¿falta una coma?): ${error.message}`);
+      process.exitCode = 1;
+      keep.add(slug); // se queda la pagina de la ultima vez que estaba bien
+      continue;
     }
-    generated.add(slug);
+    data.slug = slug; // la carpeta manda: es la que sale en la url
+
+    fs.mkdirSync(path.join(OUT, slug), { recursive: true });
+    if (writeIfChanged(path.join(OUT, slug, "index.html"), projectPage(slug, data))) written++;
+    published.push(project);
+    keep.add(slug);
   }
 
   // Borrar paginas de proyectos que ya no estan en home.json
   let removed = 0;
-  for (const entry of fs.existsSync(OUT) ? fs.readdirSync(OUT) : []) {
-    if (!generated.has(entry) && fs.statSync(path.join(OUT, entry)).isDirectory()) {
+  for (const entry of fs.readdirSync(OUT)) {
+    if (!keep.has(entry) && fs.statSync(path.join(OUT, entry)).isDirectory()) {
       fs.rmSync(path.join(OUT, entry), { recursive: true, force: true });
       removed++;
     }
   }
 
-  const homeChanged = updateHome(homeBlock({ home, siteUrl }));
+  // index.html
+  const indexFile = path.join(ROOT, "index.html");
+  let index = fs.readFileSync(indexFile, "utf8");
+  index = replaceBlock(index, "head", homeHead(home));
+  index = replaceBlock(index, "links", homeLinks(published));
+  index = replaceBlock(index, "chrome", siteChrome({ isHome: true }));
+  const homeChanged = writeIfChanged(indexFile, index);
+
+  // sitemap.xml y robots.txt
+  const urls = [`${SITE_URL}/`, ...published.map((p) => `${SITE_URL}/proyectos/${p.slug}/`)];
+  writeIfChanged(
+    path.join(ROOT, "sitemap.xml"),
+    `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${urls.map((u) => `  <url><loc>${u}</loc></url>`).join("\n")}
+</urlset>
+`
+  );
+  writeIfChanged(path.join(ROOT, "robots.txt"), `User-agent: *\nAllow: /\n\nSitemap: ${SITE_URL}/sitemap.xml\n`);
 
   console.log(
-    `[build] ${generated.size} proyectos | ${written} paginas escritas | ${removed} eliminadas | index.html ${homeChanged ? "actualizado" : "sin cambios"}`
+    `[build] ${published.length} proyectos | ${written} paginas escritas | ${removed} eliminadas | index.html ${
+      homeChanged ? "actualizado" : "sin cambios"
+    }`
   );
 }
 

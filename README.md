@@ -1,5 +1,7 @@
 # andrea carilla - web con estructura json
 
+**Para actualizar la web (Andrea): [GUIA.md](GUIA.md).**
+
 ## regla de oro
 
 **solo se tocan `data/` y `_portada/`.** todo lo demás que lleva contenido

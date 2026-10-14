@@ -91,13 +91,14 @@ párrafos**, cada uno entre comillas y separados por comas:
   "link": "https://www.instagram.com/tuttiispace/",
   "texto": [
     "Primer párrafo.",
-    "Segundo párrafo, con <b>negrita</b>, <i>cursiva</i> y un <a href=\"https://www.instagram.com/usuario/\">link</a>."
+    "Segundo párrafo, con **negrita**, *cursiva* y un [link](https://www.instagram.com/usuario/)."
   ]
 }
 ```
 
-Para negrita, cursiva o links se usan esas etiquetas: `<b>…</b>`, `<i>…</i>`
-y `<a href=\"…\">…</a>` (las comillas del link, con la barra delante: `\"`).
+Negrita, cursiva y links se escriben así: `**negrita**`, `*cursiva*` y
+`[texto del link](https://…)`. Es lo que escriben los botones del
+formateador.
 
 ### Cambiar el orden de las fotos, o quitar una
 
@@ -223,7 +224,7 @@ Un proyecto:
 | `descripcion.link` | *(opcional)* adónde lleva el título al pulsarlo | `"https://…"` |
 | `descripcion.texto` | *(opcional)* el texto, lista de párrafos | `["Uno.", "Dos."]` |
 | `tipo_proyecto` | la categoría que sale en la página (la de los filtros va en `home.json`) | `"eventos"` |
-| `ubicacion` | *(opcional)* el lugar; admite links `<a href=\"…\">` | `"Barcelona"` |
+| `ubicacion` | *(opcional)* el lugar; admite links | `"[Hangar](https://…) Barcelona"` |
 | `fecha` | *(opcional)* la fecha, como quieras escribirla | `"Marzo 2026"` |
 | `creditos` | quién hizo qué: `nombre`, `rol` y `link` (vacío si no hay) | ver arriba |
 | `imatges` | las fotos de la página, en orden | `["./img/2.webp"]` |

@@ -36,12 +36,23 @@ export function normalizeCategory(value) {
 const externalLink = (href, text) =>
   `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">${escapeHtml(text)}</a>`;
 
+// Lo que escriben los botones del formateador: **negrita**, *cursiva* y
+// [link](https://…). El html de siempre (<b>, <a href>) sigue valiendo
+const markdown = (s) =>
+  String(s)
+    .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_, text, href) => externalLink(href, text))
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/\*([^*\s][^*]*)\*/g, "<em>$1</em>");
+
+// Lo mismo sin marcas, para <meta description>
+const stripMarkdown = (s) => String(s).replace(/\[([^\]]+)\]\([^)]*\)/g, "$1").replace(/\*\*([^*]+)\*\*|\*([^*\s][^*]*)\*/g, "$1$2");
+
 // ---------------------------------------------------------------------------
 // Lectura del json de proyecto
 // ---------------------------------------------------------------------------
 export const projectTitle = (data) => data.titulo || data.slug;
 
-// Los parrafos admiten html (negrita, cursiva, enlaces del formateador).
+// Los parrafos admiten html o markdown (negrita, cursiva, enlaces del formateador).
 // "es" es el nombre antiguo de "texto"
 function paragraphs(data) {
   const d = data.descripcion || {};
@@ -51,7 +62,7 @@ function paragraphs(data) {
 // Para <meta description>: primer parrafo sin html, o el titulo
 export function projectDescription(data) {
   const candidate = paragraphs(data)[0] || data.descripcion?.titulo || projectTitle(data);
-  return truncate(normalizeWhitespace(stripHtml(candidate)), 160);
+  return truncate(normalizeWhitespace(stripHtml(stripMarkdown(candidate))), 160);
 }
 
 // Las imagenes pueden ser "./img/1.webp" o { src, alt }
@@ -76,8 +87,8 @@ function imgTag(file, alt, attrs, sizeOf) {
 // Pagina de proyecto
 // ---------------------------------------------------------------------------
 
-// Tipo, ubicacion, fecha y creditos. La ubicacion admite html (enlaces a
-// espacios y galerias); la fecha es texto libre o { mes, anio }
+// Tipo, ubicacion, fecha y creditos. La ubicacion admite html o markdown
+// (enlaces a espacios y galerias); la fecha es texto libre o { mes, anio }
 function projectMeta(data) {
   const items = [];
 
@@ -85,7 +96,7 @@ function projectMeta(data) {
   if (category) {
     items.push(`<a href="./?categoria=${encodeURIComponent(category)}">${escapeHtml(data.tipo_proyecto)}</a>`);
   }
-  if (data.ubicacion) items.push(data.ubicacion);
+  if (data.ubicacion) items.push(markdown(data.ubicacion));
 
   const fecha = data.fecha;
   if (typeof fecha === "string" && fecha) items.push(escapeHtml(fecha));
@@ -111,7 +122,7 @@ function projectDescriptionHtml(data) {
   const d = data.descripcion || {};
   const parts = [];
   if (d.titulo) parts.push(`<h2>${d.link ? externalLink(d.link, d.titulo) : escapeHtml(d.titulo)}</h2>`);
-  for (const p of paragraphs(data)) parts.push(`<p>${p}</p>`);
+  for (const p of paragraphs(data)) parts.push(`<p>${markdown(p)}</p>`);
   if (!parts.length) return "";
   return `
         <div class="project-description">

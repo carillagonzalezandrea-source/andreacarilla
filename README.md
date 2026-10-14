@@ -75,7 +75,7 @@ todos los campos son opcionales excepto `slug` (que es el nombre de la carpeta):
   "descripcion": {
     "titulo": "título de la descripción",
     "link": "https://... (opcional, el título enlaza aquí)",
-    "texto": ["párrafo 1", "párrafo 2 con <b>negrita</b> o <a href=\"...\">enlace</a>"]
+    "texto": ["párrafo 1", "párrafo 2 con **negrita** o [enlace](https://...)"]
   },
   "tipo_proyecto": "artist image",
   "fecha": "diciembre 2024",
@@ -99,7 +99,7 @@ todos los campos son opcionales excepto `slug` (que es el nombre de la carpeta):
 }
 ```
 
-- `texto` y `ubicacion` admiten html (lo que sale del formateador)
+- `texto` y `ubicacion` admiten html o markdown (`**negrita**`, `*cursiva*`, `[link](url)`: lo que escriben los botones del formateador)
 - `fecha` puede ser texto libre o `{ "mes": "diciembre", "anio": "2024" }` (el año sale en gris)
 - `imatges`: rutas, u objetos con `src` y `alt` si quieres un texto alternativo propio;
   si no, se genera solo
